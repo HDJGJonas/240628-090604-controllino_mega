@@ -45,6 +45,9 @@ int prevStirrerSpeed = -1;
 int prevPumpSpeed = -1;
 bool prevSwitchState = false;
 
+int lastPotValueStirr = -1;
+int lastPotValuePump = -1;
+
 unsigned long lastDebounceTimeStart = 0;  // Last debounce time for start button 
 unsigned long lastDebounceTimeStop = 0; // Last debounce time for stop button
 unsigned long lastExecutionTime = 0; // Last execution time for update functions
@@ -64,7 +67,6 @@ bool debounceButton(int buttonPin, unsigned long& lastDebounceTime);
 
 void setup()
 {
-  Serial.begin(9600);
   //Stepper config
   pinMode(enaStirrPin, OUTPUT);
   pinMode(dirStirrPin, OUTPUT); 
@@ -74,7 +76,7 @@ void setup()
   pinMode(enaPumpPin, OUTPUT);
   pinMode(dirPumpPin, OUTPUT);
   pinMode(stepPumpPin, OUTPUT);
-  digitalWrite(enaPumpPin, HIGH);
+  digitalWrite(enaPumpPin, LOW);
 
   stirrStepper.setMaxSpeed(stirrerSpeed/60*stepsPerRevolution);
   stirrStepper.runSpeed();
@@ -157,10 +159,12 @@ void loop()
 // Update stirrer speed based on potentiometer value
 void updateStirrerSpeed()
 {
-  potValueStirr = analogRead(potStirrPin); 
-  // Map potentiometer value (0-1023) to stirrer speed (10-120 RPM) -> 1.66...2.0 RPS
-  stirrerSpeed = map(potValueStirr, 0, 817, 10, 120);
-  stirrStepper.setMaxSpeed(stirrerSpeed/60*stepsPerRevolution);
+  potValueStirr = analogRead(potStirrPin);
+  if (abs(potValueStirr - lastPotValueStirr) > 5) { // Only update if change is significant
+    stirrerSpeed = map(potValueStirr, 0, 817, 10, 120);
+    stirrStepper.setMaxSpeed(ceil(stirrerSpeed*stepsPerRevolution/60));
+    lastPotValueStirr = potValueStirr;
+  }
 }
 
 // Update pump speed based on potentiometer value
@@ -168,8 +172,10 @@ void updatePumpSpeed()
 { 
   potValuePump = analogRead(potPumpPin); 
   // Map potentiometer value (0-820) to pump speed (1-10 RPS) 
-  pumpSpeed = map(potValuePump, 0, 817, 1, 10);
-  pumpStepper.setMaxSpeed(pumpSpeed*stepsPerRevolution);
+  if (abs(potValuePump - lastPotValuePump) > 5) { // Only update if change is significant
+    pumpSpeed = map(potValuePump, 0, 817, 1, 10);
+    pumpStepper.setMaxSpeed(pumpSpeed*stepsPerRevolution);
+  }
 }
 
 void startDosing(bool mode)
@@ -195,7 +201,7 @@ inline void runSteppers()
 }
 
 // Function for debouncing button presses
-bool debounceButton(int buttonPin, unsigned long& lastDebounceTime)
+inline bool debounceButton(int buttonPin, unsigned long& lastDebounceTime)
 { 
   unsigned long currentTime = millis();
   const long debounceDelay = 50;  // Debounce delay in milliseconds
