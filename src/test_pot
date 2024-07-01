@@ -1,0 +1,33 @@
+#include <Arduino.h>
+
+#include <AccelStepper.h>
+#include <MultiStepper.h>
+
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+
+#include <SPI.h>
+#include <Controllino.h>
+
+const int potStirrPin = A0;
+const int potPumpPin = A1;
+
+void setup()
+{  
+    Serial.begin(9600);
+    
+    //Pot config
+    pinMode(potStirrPin, INPUT);
+    pinMode(potPumpPin, INPUT);
+}
+
+void loop()
+{  
+    int readStirr = analogRead(potStirrPin);
+    readStirr = map (readStirr, 0, 817, 10, 120);
+    int readPump = analogRead(potPumpPin);
+    readPump = map (readPump, 0, 817, 1, 10);
+    Serial.print(readStirr);
+    Serial.print(", ");
+    Serial.println(readPump);
+}

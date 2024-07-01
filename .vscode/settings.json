@@ -1,0 +1,7 @@
+{
+    "files.associations": {
+        "liquidcrystal_i2c.h": "c",
+        "arduino.h": "c",
+        "slds": "c"
+    }
+}

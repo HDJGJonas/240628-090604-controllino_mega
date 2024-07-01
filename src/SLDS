@@ -1,0 +1,175 @@
+#include <Arduino.h>
+
+#include <AccelStepper.h>
+#include <MultiStepper.h>
+
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+
+#include <SPI.h>
+#include <Controllino.h>
+
+// Stepper parameters
+const int stepsPerRevolution = 400;
+
+const int enaStirrPin = 2; 
+const int dirStirrPin = 3; 
+const int stepStirrPin = 4;
+
+const int enaPumpPin = 5;
+const int dirPumpPin = 6;
+const int stepPumpPin = 7;
+
+AccelStepper stirrStepper = AccelStepper(1, stepStirrPin, dirStirrPin);
+AccelStepper pumpStepper = AccelStepper(1, stepPumpPin, dirPumpPin);
+
+// Input parameters
+const int potStirrPin = A0;
+const int potPumpPin = A1;
+int potValueStirr = 0;
+int potValuePump = 0;
+
+const int btnStartPin = A5;
+const int btnStopPin = A6;
+
+const int switchModePin = A9;
+bool switchState = false;
+
+// Program parameters
+int stirrerSpeed = 10;
+unsigned long pumpStepperTarget = stepsPerRevolution;
+int pumpSpeed = 1;
+
+int prevStirrerSpeed = -1; // Initialize with impossible values to ensure update on first run
+int prevPumpSpeed = -1;
+bool prevSwitchState = false;
+
+unsigned long lastDebounceTimeStart = 0;  // Last debounce time for start button 
+unsigned long lastDebounceTimeStop = 0; // Last debounce time for stop button
+
+bool isDosing = false;
+
+LiquidCrystal_I2C lcd(0x3F, 16, 2); // Add I2C address of display
+
+void setup();
+void loop();
+void updateStirrerSpeed();
+void updatePumpSpeed(bool mode);
+void runSteppers();
+bool debounceButton(int buttonPin, unsigned long& lastDebounceTime);
+
+void setup()
+{
+  Serial.begin(9600);
+  //Stepper config
+  pinMode(enaStirrPin, OUTPUT);
+  pinMode(dirStirrPin, OUTPUT); 
+  pinMode(stepStirrPin, OUTPUT);
+  digitalWrite(enaStirrPin, LOW);
+
+  pinMode(enaPumpPin, OUTPUT);
+  pinMode(dirPumpPin, OUTPUT);
+  pinMode(stepPumpPin, OUTPUT);
+  digitalWrite(enaPumpPin, HIGH);
+
+  stirrStepper.setMaxSpeed(800);
+  stirrStepper.runSpeed();
+
+  pumpStepper.setMaxSpeed(800);
+  pumpStepper.setAcceleration(200);
+  pumpStepper.move(pumpStepperTarget);
+
+
+  //Input config
+  pinMode(potStirrPin, INPUT);
+  pinMode(potPumpPin, INPUT);
+  pinMode(btnStartPin, INPUT);
+  pinMode(btnStopPin, INPUT);
+  pinMode(switchModePin, INPUT);
+
+  //Display config
+  lcd.init();
+  lcd.backlight();
+  lcd.clear();
+}
+void loop()
+{
+  // Prioritize stepper motor updates
+  runSteppers();
+  // runPump(switchState);
+  updateStirrerSpeed();
+
+  runSteppers();
+  
+  switchState = digitalRead(switchModePin);
+
+  updatePumpSpeed(switchState == HIGH);
+  // Non-blocking debounce check for buttonsp
+  if (debounceButton(btnStartPin, lastDebounceTimeStart))
+  {
+    isDosing = true;
+  }
+
+  runSteppers();
+
+  if (debounceButton(btnStopPin, lastDebounceTimeStop))
+  {
+    isDosing = false;
+  }
+
+  runSteppers();
+
+  //Read and update only if necessary to minimize delay
+  lcd.setCursor(0, 0);
+  lcd.print("Stirrer: ");
+  lcd.print(stirrerSpeed);
+  lcd.print(" RPM ");
+
+  runSteppers();
+
+  lcd.setCursor(0, 1);
+  lcd.print("Pump: ");
+  lcd.print(pumpSpeed);
+  lcd.print(" RPS ");
+  
+  runSteppers();
+}
+
+// Update stirrer speed based on potentiometer value
+void updateStirrerSpeed()
+{
+  potValueStirr = analogRead(potStirrPin); 
+  // Map potentiometer value (0-1023) to stirrer speed (10-120 RPM) -> 1.66...2.0 RPS
+  stirrerSpeed = map(potValueStirr, 0, 817, 10, 120);
+  stirrStepper.setMaxSpeed(stirrerSpeed/60*stepsPerRevolution);
+}
+
+// Update pump speed based on potentiometer value
+void updatePumpSpeed(bool mode)
+{ 
+  potValuePump = analogRead(potPumpPin); 
+  // Map potentiometer value (0-820) to pump speed (1-10 RPS) 
+  pumpSpeed = map(potValuePump, 0, 817, 1, 10);
+  pumpStepper.setMaxSpeed(pumpSpeed*stepsPerRevolution);
+}
+
+// Run both Steppers
+void runSteppers()
+{
+  stirrStepper.run();
+  pumpStepper.run();
+}
+
+// Function for debouncing button presses
+bool debounceButton(int buttonPin, unsigned long& lastDebounceTime)
+{ 
+  unsigned long currentTime = millis();
+  const long debounceDelay = 50;  // Debounce delay in milliseconds
+
+  if (digitalRead(buttonPin) == LOW && currentTime - lastDebounceTime > debounceDelay) 
+  {
+    lastDebounceTime = currentTime;
+    return true;
+  }
+return false;
+}
