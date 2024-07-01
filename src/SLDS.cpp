@@ -6,6 +6,8 @@
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 
+#include <TimerOne.h>
+
 #include <SPI.h>
 #include <Controllino.h>
 
@@ -33,28 +35,30 @@ const int btnStartPin = A5;
 const int btnStopPin = A6;
 
 const int switchModePin = A9;
-bool switchState = false;
 
 // Program parameters
 int stirrerSpeed = 10;
 unsigned long pumpStepperTarget = stepsPerRevolution;
 int pumpSpeed = 1;
 
-int prevStirrerSpeed = -1; // Initialize with impossible values to ensure update on first run
+int prevStirrerSpeed = -1;
 int prevPumpSpeed = -1;
 bool prevSwitchState = false;
 
 unsigned long lastDebounceTimeStart = 0;  // Last debounce time for start button 
 unsigned long lastDebounceTimeStop = 0; // Last debounce time for stop button
+unsigned long lastExecutionTime = 0; // Last execution time for update functions
 
 bool isDosing = false;
+bool switchState = false; // False equals single dose mode, true equals continuous mode
 
 LiquidCrystal_I2C lcd(0x3F, 16, 2); // Add I2C address of display
 
 void setup();
 void loop();
 void updateStirrerSpeed();
-void updatePumpSpeed(bool mode);
+void updatePumpSpeed();
+void startDosing();
 void runSteppers();
 bool debounceButton(int buttonPin, unsigned long& lastDebounceTime);
 
@@ -72,11 +76,11 @@ void setup()
   pinMode(stepPumpPin, OUTPUT);
   digitalWrite(enaPumpPin, HIGH);
 
-  stirrStepper.setMaxSpeed(800);
+  stirrStepper.setMaxSpeed(stirrerSpeed/60*stepsPerRevolution);
   stirrStepper.runSpeed();
 
-  pumpStepper.setMaxSpeed(800);
-  pumpStepper.setAcceleration(200);
+  pumpStepper.setMaxSpeed(pumpSpeed*stepsPerRevolution);
+  pumpStepper.setAcceleration(30000);
   pumpStepper.move(pumpStepperTarget);
 
 
@@ -91,48 +95,63 @@ void setup()
   lcd.init();
   lcd.backlight();
   lcd.clear();
+
+  lcd.setCursor(0, 0);
+  lcd.print("Stirrer:");
+  lcd.setCursor(12, 0);
+  lcd.print("RPM");
+  lcd.setCursor(0, 1);
+  lcd.print("Pump:");
+  lcd.setCursor(12, 1);
+  lcd.print("RPS");
+
+  //Timer config
+  Timer1.initialize(300); // Timer for stepper motor updates
+  Timer1.attachInterrupt(runSteppers);
 }
+
 void loop()
 {
-  // Prioritize stepper motor updates
-  runSteppers();
-  // runPump(switchState);
-  updateStirrerSpeed();
-
-  runSteppers();
-  
-  switchState = digitalRead(switchModePin);
-
-  updatePumpSpeed(switchState == HIGH);
-  // Non-blocking debounce check for buttonsp
+  // Non-blocking debounce check for buttons
   if (debounceButton(btnStartPin, lastDebounceTimeStart))
   {
     isDosing = true;
+    startDosing(switchState);
   }
-
-  runSteppers();
 
   if (debounceButton(btnStopPin, lastDebounceTimeStop))
   {
     isDosing = false;
   }
 
-  runSteppers();
+  updateStirrerSpeed();
+  updatePumpSpeed();
 
   //Read and update only if necessary to minimize delay
-  lcd.setCursor(0, 0);
-  lcd.print("Stirrer: ");
-  lcd.print(stirrerSpeed);
-  lcd.print(" RPM ");
+  if (millis() - lastExecutionTime > 300)
+  {
+    // Change Switch State
+    switchState = digitalRead(switchModePin);
 
-  runSteppers();
+    // Update Stepper Speeds
+    updateStirrerSpeed();
+    updatePumpSpeed();
 
-  lcd.setCursor(0, 1);
-  lcd.print("Pump: ");
-  lcd.print(pumpSpeed);
-  lcd.print(" RPS ");
-  
-  runSteppers();
+    // Update Display
+    if (prevStirrerSpeed != stirrerSpeed)
+    {
+      lcd.setCursor(9, 0);
+      lcd.print(stirrerSpeed);
+      prevStirrerSpeed = stirrerSpeed;
+    }
+    if (prevPumpSpeed != pumpSpeed)
+    {
+      lcd.setCursor(9, 1);
+      lcd.print(pumpSpeed);
+      prevPumpSpeed = pumpSpeed;
+    }
+    lastExecutionTime = millis();
+  }
 }
 
 // Update stirrer speed based on potentiometer value
@@ -145,7 +164,7 @@ void updateStirrerSpeed()
 }
 
 // Update pump speed based on potentiometer value
-void updatePumpSpeed(bool mode)
+void updatePumpSpeed()
 { 
   potValuePump = analogRead(potPumpPin); 
   // Map potentiometer value (0-820) to pump speed (1-10 RPS) 
@@ -153,11 +172,26 @@ void updatePumpSpeed(bool mode)
   pumpStepper.setMaxSpeed(pumpSpeed*stepsPerRevolution);
 }
 
-// Run both Steppers
-void runSteppers()
+void startDosing(bool mode)
 {
-  stirrStepper.run();
-  pumpStepper.run();
+  if (!mode)
+  {
+    pumpStepper.move(stepsPerRevolution);
+  }
+}
+
+// Run both Steppers
+inline void runSteppers()
+{
+  stirrStepper.runSpeed();
+  if (switchState && isDosing)
+  {
+    pumpStepper.runSpeed();
+  }
+  else
+  {
+    pumpStepper.run();
+  }
 }
 
 // Function for debouncing button presses
