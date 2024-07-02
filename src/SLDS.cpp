@@ -126,9 +126,6 @@ void loop()
     isDosing = false;
   }
 
-  updateStirrerSpeed();
-  updatePumpSpeed();
-
   //Read and update only if necessary to minimize delay
   if (millis() - lastExecutionTime > 300)
   {
