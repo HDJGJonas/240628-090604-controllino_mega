@@ -61,7 +61,7 @@ void setup();
 void loop();
 void updateStirrerSpeed();
 void updatePumpSpeed();
-void startDosing();
+void startDosing(bool mode);
 void runSteppers();
 bool debounceButton(int buttonPin, unsigned long& lastDebounceTime);
 
@@ -183,14 +183,14 @@ void startDosing(bool mode)
     pumpStepper.move(stepsPerRevolution);
   }else{
     pumpStepper.setAcceleration(200);
-    pumpStepper.move(stepsPerRevolution*10000);
+    pumpStepper.move(100000);
   }
 }
 
 // Run both Steppers
 inline void runSteppers()
 {
-  stirrStepper.runSpeed();
+  stirrStepper.run();
   if (isDosing)
   {
     pumpStepper.run();
