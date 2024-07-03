@@ -78,9 +78,9 @@ void setup()
   pinMode(stepPumpPin, OUTPUT);
   digitalWrite(enaPumpPin, LOW);
 
-  stirrStepper.setMaxSpeed(ceil(stirrerSpeed*stepsPerRevolution/60));
-  stirrStepper.setAcceleration(200);
-  stirrStepper.move(pumpStepperTarget);
+  stirrStepper.setMaxSpeed((2*stepsPerRevolution));
+  stirrStepper.setAcceleration(30000);
+  stirrStepper.move(1000000);
 
   pumpStepper.setMaxSpeed(pumpSpeed*stepsPerRevolution);
   pumpStepper.setAcceleration(30000);
@@ -98,15 +98,6 @@ void setup()
   lcd.init();
   lcd.backlight();
   lcd.clear();
-
-  lcd.setCursor(0, 0);
-  lcd.print("Stirrer:");
-  lcd.setCursor(12, 0);
-  lcd.print("RPM");
-  lcd.setCursor(0, 1);
-  lcd.print("Pump:");
-  lcd.setCursor(12, 1);
-  lcd.print("RPS");
 
   //Timer config
   Timer1.initialize(300); // Timer for stepper motor updates
@@ -140,14 +131,18 @@ void loop()
     // Update Display
     if (prevStirrerSpeed != stirrerSpeed)
     {
-      lcd.setCursor(9, 0);
+      lcd.setCursor(0, 0);
+      lcd.print("Stirrer: ");
       lcd.print(stirrerSpeed);
+      lcd.print(" RPM");
       prevStirrerSpeed = stirrerSpeed;
     }
     if (prevPumpSpeed != pumpSpeed)
     {
-      lcd.setCursor(9, 1);
+      lcd.setCursor(0, 1);
+      lcd.print("Pump: ");
       lcd.print(pumpSpeed);
+      lcd.print(" RPS");
       prevPumpSpeed = pumpSpeed;
     }
     lastExecutionTime = millis();
@@ -160,7 +155,7 @@ void updateStirrerSpeed()
   potValueStirr = analogRead(potStirrPin);
   if (abs(potValueStirr - lastPotValueStirr) > 5) { // Only update if change is significant
     stirrerSpeed = map(potValueStirr, 0, 817, 10, 120);
-    stirrStepper.setMaxSpeed(ceil(stirrerSpeed*stepsPerRevolution/60));
+    stirrStepper.setMaxSpeed(2*stepsPerRevolution);
     lastPotValueStirr = potValueStirr;
   }
 }
@@ -170,10 +165,8 @@ void updatePumpSpeed()
 { 
   potValuePump = analogRead(potPumpPin); 
   // Map potentiometer value (0-820) to pump speed (1-10 RPS) 
-  if (abs(potValuePump - lastPotValuePump) > 5) { // Only update if change is significant
-    pumpSpeed = map(potValuePump, 0, 817, 1, 10);
-    pumpStepper.setMaxSpeed(pumpSpeed*stepsPerRevolution);
-  }
+  pumpSpeed = map(potValuePump, 0, 817, 1, 10);
+  pumpStepper.setMaxSpeed(pumpSpeed*stepsPerRevolution);
 }
 
 void startDosing(bool mode)
@@ -192,10 +185,10 @@ void startDosing(bool mode)
 inline void runSteppers()
 {
   stirrStepper.run();
-  if (isDosing || (pumpStepper.distanceToGo() != 0))
+  if (isDosing && (pumpStepper.distanceToGo() != 0))
   {
     if (switchState == true){
-      pumpStepper.move(stepsPerRevolution)
+      pumpStepper.move(stepsPerRevolution);
     }
     pumpStepper.run();
   }
