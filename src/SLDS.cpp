@@ -81,9 +81,7 @@ void setup()
   pinMode(stepPumpPin, OUTPUT);
   digitalWrite(enaPumpPin, LOW);
 
-  stirrStepper.setMaxSpeed((2*stepsPerRevolution));
-  stirrStepper.setAcceleration(30000);
-  stirrStepper.move(1000000);
+  stirrStepper.setMaxSpeed(ceil(stirrerSpeed*stepsPerRevolution/60));
 
   pumpStepper.setMaxSpeed(pumpSpeed*stepsPerRevolution);
   pumpStepper.setAcceleration(30000);
@@ -203,7 +201,7 @@ void updatePumpSpeed()
 // Run both Steppers
 inline void runSteppers()
 {
-  stirrStepper.run();
+  stirrStepper.runSpeed();
   if (isDosing || (pumpStepper.distanceToGo() != 0) && (switchState == false)){
     if (switchState){
       pumpStepper.runSpeed();
