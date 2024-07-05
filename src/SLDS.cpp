@@ -34,6 +34,9 @@ int potValuePump = 0;
 const int btnStartPin = A5;
 const int btnStopPin = A6;
 
+// const int btnEnablePumpPin = A7;
+// const int btnEnableStirrPin = A8;
+
 const int switchModePin = A9;
 
 // Program parameters
@@ -99,8 +102,18 @@ void setup()
   lcd.backlight();
   lcd.clear();
 
+  lcd.setCursor(0, 0);
+  lcd.print("Stirrer:");
+  lcd.setCursor(12, 0);
+  lcd.print("RPM");
+
+  lcd.setCursor(0, 1);
+  lcd.print("Pump:");
+  lcd.setCursor(12, 1);
+  lcd.print("RPS");
+
   //Timer config
-  Timer1.initialize(300); // Timer for stepper motor updates
+  Timer1.initialize(100); // Timer for stepper motor updates
   Timer1.attachInterrupt(runSteppers);
 }
 
@@ -110,7 +123,8 @@ void loop()
   if (debounceButton(btnStartPin, lastDebounceTimeStart))
   {
     isDosing = true;
-    startDosing(switchState);
+    pumpStepper.move(stepsPerRevolution);
+    // startDosing(switchState);
   }
 
   if (debounceButton(btnStopPin, lastDebounceTimeStop))
@@ -131,18 +145,20 @@ void loop()
     // Update Display
     if (prevStirrerSpeed != stirrerSpeed)
     {
-      lcd.setCursor(0, 0);
-      lcd.print("Stirrer: ");
+      lcd.setCursor(8, 0);
+      if (stirrerSpeed < 100) {
+        lcd.print(F("0")); // Print a leading zero
+      }
       lcd.print(stirrerSpeed);
-      lcd.print(" RPM");
       prevStirrerSpeed = stirrerSpeed;
     }
     if (prevPumpSpeed != pumpSpeed)
     {
-      lcd.setCursor(0, 1);
-      lcd.print("Pump: ");
+      lcd.setCursor(8, 1);
+      if (pumpSpeed < 10) {
+        lcd.print(F("0")); // Print a leading zero
+      }
       lcd.print(pumpSpeed);
-      lcd.print(" RPS");
       prevPumpSpeed = pumpSpeed;
     }
     lastExecutionTime = millis();
@@ -153,9 +169,9 @@ void loop()
 void updateStirrerSpeed()
 {
   potValueStirr = analogRead(potStirrPin);
-  if (abs(potValueStirr - lastPotValueStirr) > 5) { // Only update if change is significant
-    stirrerSpeed = map(potValueStirr, 0, 817, 10, 120);
-    stirrStepper.setMaxSpeed(2*stepsPerRevolution);
+  if (abs(potValueStirr - lastPotValueStirr) > 2) { // Only update if change is significant
+    stirrerSpeed = map(potValueStirr, 5, 815, 10, 120);
+    stirrStepper.setMaxSpeed(ceil(stirrerSpeed*stepsPerRevolution/60));
     lastPotValueStirr = potValueStirr;
   }
 }
@@ -165,32 +181,39 @@ void updatePumpSpeed()
 { 
   potValuePump = analogRead(potPumpPin); 
   // Map potentiometer value (0-820) to pump speed (1-10 RPS) 
-  pumpSpeed = map(potValuePump, 0, 817, 1, 10);
-  pumpStepper.setMaxSpeed(pumpSpeed*stepsPerRevolution);
-}
-
-void startDosing(bool mode)
-{
-  if (!mode)
-  {
-    pumpStepper.setAcceleration(30000);
-    pumpStepper.move(stepsPerRevolution);
-  }else{
-    pumpStepper.setAcceleration(200);
-    pumpStepper.move(100000);
+  if (abs(potValuePump - lastPotValuePump) > 2) { // Only update if change is significant
+    pumpSpeed = map(potValuePump, 5, 815, 1, 10);
+    pumpStepper.setMaxSpeed(pumpSpeed*stepsPerRevolution);
+    lastPotValuePump = potValuePump;
   }
 }
+
+// void startDosing(bool mode)
+// {
+//   if (!mode)
+//   {
+//     pumpStepper.setAcceleration(30000);
+//     pumpStepper.move(stepsPerRevolution);
+//   }else{
+//     pumpStepper.setAcceleration(200);
+//     pumpStepper.move(100000);
+//   }
+// }
 
 // Run both Steppers
 inline void runSteppers()
 {
   stirrStepper.run();
-  if (isDosing && (pumpStepper.distanceToGo() != 0))
-  {
-    if (switchState == true){
-      pumpStepper.move(stepsPerRevolution);
+  if (isDosing || (pumpStepper.distanceToGo() != 0) && (switchState == false)){
+    if (switchState){
+      pumpStepper.runSpeed();
+    }else{
+      if (pumpStepper.distanceToGo() == 0){
+        isDosing = false;
+      }else{
+        pumpStepper.run();
+      }
     }
-    pumpStepper.run();
   }
 }
 
