@@ -202,7 +202,7 @@ void updatePumpSpeed()
 inline void runSteppers()
 {
   stirrStepper.runSpeed();
-  if (isDosing || (pumpStepper.distanceToGo() != 0) && (switchState == false)){
+  if (isDosing || ((pumpStepper.distanceToGo() != 0) && (switchState == false))){
     if (switchState){
       pumpStepper.runSpeed();
     }else{
