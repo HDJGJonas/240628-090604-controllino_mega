@@ -64,7 +64,7 @@ void setup();
 void loop();
 void updateStirrerSpeed();
 void updatePumpSpeed();
-void startDosing(bool mode);
+// void startDosing(bool mode);
 void runSteppers();
 bool debounceButton(int buttonPin, unsigned long& lastDebounceTime);
 
