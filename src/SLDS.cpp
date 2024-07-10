@@ -34,8 +34,11 @@ int potValuePump = 0;
 const int btnStartPin = A5;
 const int btnStopPin = A6;
 
-// const int btnEnablePumpPin = A7;
-// const int btnEnableStirrPin = A8;
+const int btnEnablePumpPin = A7;
+const int btnEnableStirrPin = A8;
+
+bool pumpEnabled = true;
+bool stirrEnabled = true;
 
 const int switchModePin = A9;
 
@@ -55,6 +58,8 @@ unsigned long lastDebounceTimeStart = 0;  // Last debounce time for start button
 unsigned long lastDebounceTimeStop = 0; // Last debounce time for stop button
 unsigned long lastExecutionTime = 0; // Last execution time for update functions
 
+unsigned long startTime = 0;
+
 bool isDosing = false;
 bool switchState = false; // False equals single dose mode, true equals continuous mode
 
@@ -64,7 +69,7 @@ void setup();
 void loop();
 void updateStirrerSpeed();
 void updatePumpSpeed();
-// void startDosing(bool mode);
+void startDosing(bool mode);
 void runSteppers();
 bool debounceButton(int buttonPin, unsigned long& lastDebounceTime);
 
@@ -82,10 +87,12 @@ void setup()
   digitalWrite(enaPumpPin, LOW);
 
   stirrStepper.setMaxSpeed(ceil(stirrerSpeed*stepsPerRevolution/60));
+  stirrStepper.setAcceleration(10000);
+  stirrStepper.move(1000000);
 
   pumpStepper.setMaxSpeed(pumpSpeed*stepsPerRevolution);
-  pumpStepper.setAcceleration(30000);
-  pumpStepper.move(pumpStepperTarget);
+  pumpStepper.setAcceleration(20000);
+  pumpStepper.move(0);
 
 
   //Input config
@@ -111,7 +118,7 @@ void setup()
   lcd.print("RPS");
 
   //Timer config
-  Timer1.initialize(100); // Timer for stepper motor updates
+  Timer1.initialize(40); // Timer for stepper motor updates
   Timer1.attachInterrupt(runSteppers);
 }
 
@@ -120,14 +127,14 @@ void loop()
   // Non-blocking debounce check for buttons
   if (debounceButton(btnStartPin, lastDebounceTimeStart))
   {
+    startDosing(switchState);
     isDosing = true;
-    pumpStepper.move(stepsPerRevolution);
-    // startDosing(switchState);
   }
 
   if (debounceButton(btnStopPin, lastDebounceTimeStop))
   {
     isDosing = false;
+    pumpStepper.stop();
   }
 
   //Read and update only if necessary to minimize delay
@@ -152,15 +159,25 @@ void loop()
     }
     if (prevPumpSpeed != pumpSpeed)
     {
-      lcd.setCursor(8, 1);
+      lcd.setCursor(9, 1);
       if (pumpSpeed < 10) {
         lcd.print(F("0")); // Print a leading zero
       }
       lcd.print(pumpSpeed);
       prevPumpSpeed = pumpSpeed;
     }
+
+    stirrStepper.move(1000000);
+
+    if (switchState && isDosing){
+      pumpStepper.move(1000000);
+    }
+
     lastExecutionTime = millis();
   }
+
+  pumpEnabled = digitalRead(btnEnablePumpPin) == HIGH;
+  stirrEnabled = digitalRead(btnEnableStirrPin) == HIGH;
 }
 
 // Update stirrer speed based on potentiometer value
@@ -186,32 +203,28 @@ void updatePumpSpeed()
   }
 }
 
-// void startDosing(bool mode)
-// {
-//   if (!mode)
-//   {
-//     pumpStepper.setAcceleration(30000);
-//     pumpStepper.move(stepsPerRevolution);
-//   }else{
-//     pumpStepper.setAcceleration(200);
-//     pumpStepper.move(100000);
-//   }
-// }
+void startDosing(bool mode)
+{
+  if (!mode)
+  {
+    pumpStepper.setAcceleration(30000);
+    pumpStepper.move(stepsPerRevolution);
+  }else{
+    pumpStepper.setAcceleration(30000);
+    pumpStepper.move(100000);
+  }
+}
 
 // Run both Steppers
 inline void runSteppers()
 {
-  stirrStepper.runSpeed();
-  if (isDosing || ((pumpStepper.distanceToGo() != 0) && (switchState == false))){
-    if (switchState){
-      pumpStepper.runSpeed();
-    }else{
-      if (pumpStepper.distanceToGo() == 0){
-        isDosing = false;
-      }else{
-        pumpStepper.run();
-      }
-    }
+  if (pumpEnabled)
+  {
+    pumpStepper.run();
+  }
+  if (stirrEnabled)
+  {
+    stirrStepper.run();
   }
 }
 
@@ -219,7 +232,7 @@ inline void runSteppers()
 inline bool debounceButton(int buttonPin, unsigned long& lastDebounceTime)
 { 
   unsigned long currentTime = millis();
-  const long debounceDelay = 50;  // Debounce delay in milliseconds
+  const long debounceDelay = 1000;  // Debounce delay in milliseconds
 
   if (digitalRead(buttonPin) == LOW && currentTime - lastDebounceTime > debounceDelay) 
   {
